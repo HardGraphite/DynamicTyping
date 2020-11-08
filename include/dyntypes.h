@@ -46,15 +46,31 @@ typedef const char *Dt_Str;    ///< c-style string type
 typedef enum _Dt_Method
 {
     __Dt_M_0__    = 0,
-    Dt_M_ToBool   = 1, ///< [0] convert to bool
-    Dt_M_ToInt    = 2, ///< [0] convert to int
-    Dt_M_ToFloat  = 3, ///< [0] convert to float
-    Dt_M_ToStr    = 4, ///< [0] convert to str
-    Dt_M_Length   = 5, ///< [0] get length (int)
-    __Dt_M_0E__   = 6,
+    Dt_M_ToBool   = 1,  ///< [0] convert to bool (-> bool)
+    Dt_M_ToInt    = 2,  ///< [0] convert to int (-> int)
+    Dt_M_ToFloat  = 3,  ///< [0] convert to float (-> float)
+    Dt_M_ToStr    = 4,  ///< [0] convert to str (-> str)
+    Dt_M_Length   = 5,  ///< [0] get length (-> int)
+    Dt_M_Hash     = 6,  ///< [0] get hash (-> int)
+    Dt_M_Clone    = 7,  ///< [0] clone (-> old type)
+    Dt_M_DClone   = 8,  ///< [0] deep clone (-> old type)
+    Dt_M_IncRef   = 9,  ///< [0] inc-ref (-> old type)
+    Dt_M_DecRef   = 10, ///< [0] dec-ref (-> nil)
+    Dt_M_Delete   = 11, ///< [0] delete (-> nil)
+    __Dt_M_0E__   = 12,
 
     __Dt_M_1__    = 32,
-    __Dt_M_1E__   = 32,
+    Dt_M_Add      = 33, ///< [1] `+`
+    Dt_M_Sub      = 34, ///< [1] `-`
+    Dt_M_Mul      = 35, ///< [1] `*`
+    Dt_M_Div      = 36, ///< [1] `/`
+    Dt_M_Pow      = 37, ///< [1] `**`
+    Dt_M_Rem      = 38, ///< [1] `%`
+    Dt_M_Shl      = 39, ///< [1] `<<`
+    Dt_M_Shr      = 40, ///< [1] `>>`
+    Dt_M_BitAnd   = 41, ///< [1] `&`
+    Dt_M_BitOr    = 42, ///< [1] `|`
+    __Dt_M_1E__   = 43,
 
     __Dt_M_2__    = 64,
     __Dt_M_2E__   = 64,
@@ -101,6 +117,16 @@ HGL_DT_API extern Dt_ValuePtr Dt_newBool(Dt_Bool b);
 HGL_DT_API extern Dt_ValuePtr Dt_newInt(Dt_Int i);
 HGL_DT_API extern Dt_ValuePtr Dt_newFloat(Dt_Float f);
 HGL_DT_API extern Dt_ValuePtr Dt_newStr(Dt_Str s);
+HGL_DT_API extern Dt_ValuePtr Dt_newStrN(Dt_Str s, Dt_Size len);
+
+/**
+ * @brief create a list
+ * 
+ * @param len length of the list
+ * @param ... Dt_ValuePtr type values, ending with NULL
+ * @return a list value
+ */
+HGL_DT_API extern Dt_ValuePtr Dt_newList(Dt_Size len, ...);
 
 #ifndef __cplusplus
 
@@ -131,12 +157,12 @@ HGL_DT_API extern Dt_ValuePtr Dt_newStr(Dt_Str s);
 
 template <typename T> inline Dt_ValuePtr Dt_newValue(T X) noexcept
 {
-    if constexpr (std::is_integral<T>::value)
+    if constexpr (std::is_same<T, Dt_Bool>::value)
+        return Dt_newBool(X);
+    else if constexpr (std::is_integral<T>::value)
         return Dt_newInt(X);
     else if constexpr (std::is_floating_point<T>::value)
         return Dt_newFloat(X);
-    else if constexpr (std::is_same<T, Dt_Bool>::value)
-        return Dt_newBool(X);
     else if constexpr (std::is_convertible<T, const char*>::value)
         return Dt_newStr(X);
     else
@@ -145,6 +171,19 @@ template <typename T> inline Dt_ValuePtr Dt_newValue(T X) noexcept
         return X;
     }
 }
+
+/// literals
+namespace DtLiterals
+{
+    HGL_DT_API inline Dt_ValuePtr operator ""_i (unsigned long long int i)
+        { return Dt_newInt(i); }
+
+    HGL_DT_API inline Dt_ValuePtr operator ""_f (long double f)
+        { return Dt_newFloat(f); }
+
+    HGL_DT_API inline Dt_ValuePtr operator ""_s (const char * s, std::size_t n)
+        { return Dt_newStrN(s, n); }
+} // namespace DtLiterals
 
 extern "C" {
 
@@ -162,14 +201,14 @@ extern "C" {
  */
 #define DT_decRef(ValuePtr) \
     (((ValuePtr)->_rc > (Dt_Size)1) ? \
-        ((ValuePtr)->_rc--, (void)0) : Dt_delValue(ValuePtr))
+        ((ValuePtr)->_rc--, (void)0) : (DT_delValue(ValuePtr), (void)0))
 
 /**
  * @brief delete a value
- * @param v the value to delete
+ * @param ValuePtr the value to delete
  * @warning deleting a value with its ref-cnt over 1 may lead to unexpected errors
  */
-HGL_DT_API extern void Dt_delValue(Dt_ValuePtr v);
+#define DT_delValue(ValuePtr) DT_invokeMethod0(ValuePtr, Dt_M_Delete)
 
 /* --- --- --- --- --- value unwrap --- --- --- --- --- */
 
@@ -185,15 +224,16 @@ HGL_DT_API extern Dt_Type Dt_BoolType;
 HGL_DT_API extern Dt_Type Dt_IntType;
 HGL_DT_API extern Dt_Type Dt_FloatType;
 HGL_DT_API extern Dt_Type Dt_StrType;
+HGL_DT_API extern Dt_Type Dt_ListType;
 
 /// get type of a value
 #define DT_TypeOf(ValuePtr)         (*(ValuePtr->_tm))
 /// get type name of a value (returns name of type `const char*`)
 #define DT_TypeNameOf(ValuePtr)     (ValuePtr->_tm->name)
 /// check if two values have same type
-#define DT_isSameType(VP1, VP2)     (DT_TypeOf(VP1) == DT_TypeOf(VP2))
+#define DT_isSameType(VP1, VP2)     (&DT_TypeOf(VP1) == &DT_TypeOf(VP2))
 /// check if a value is the given type
-#define DT_isType(ValuePtr, Type)   (DT_TypeOf(ValuePtr) == &Type)
+#define DT_isType(ValuePtr, Type)   (&DT_TypeOf(ValuePtr) == &Type)
 
 /* --- --- --- --- --- methods --- --- --- --- --- */
 
@@ -224,6 +264,15 @@ HGL_DT_API extern Dt_Type Dt_StrType;
  */
 HGL_DT_API extern Dt_ValuePtr Dt_invokeMethod(Dt_ValuePtr v, Dt_Method m, ...);
 
+#define DT_Add(A, B)    DT_invokeMethod1(A, Dt_M_Add, B)
+#define DT_Sub(A, B)    DT_invokeMethod1(A, Dt_M_Sub, B)
+#define DT_Mul(A, B)    DT_invokeMethod1(A, Dt_M_Mul, B)
+#define DT_Div(A, B)    DT_invokeMethod1(A, Dt_M_Div, B)
+#define DT_Pow(A, B)    DT_invokeMethod1(A, Dt_M_Pow, B)
+#define DT_Rem(A, B)    DT_invokeMethod1(A, Dt_M_Rem, B)
+#define DT_Shl(A, B)    DT_invokeMethod1(A, Dt_M_Shl, B)
+#define DT_Shr(A, B)    DT_invokeMethod1(A, Dt_M_Shr, B)
+
 /* --- --- --- --- --- derivatives --- --- --- --- --- */
 
 /**
@@ -233,15 +282,26 @@ HGL_DT_API extern Dt_ValuePtr Dt_invokeMethod(Dt_ValuePtr v, Dt_Method m, ...);
  * @param ... data to format
  * @return formatted string (Dt_ValuePtr, instance of Dt_StrType)
  */
-HGL_DT_API extern Dt_ValuePtr Dt_format(const char * restrict fmtstr, ...);
+HGL_DT_API extern Dt_ValuePtr Dt_format(const char * fmtstr, ...);
 
 /* --- --- --- --- error handling --- --- --- --- */
+
+/// error reasons (enum)
+typedef enum _Dt_Error
+{
+    Dt_NoError = 0,
+    Dt_MethodError,
+    Dt_TypeError,
+    Dt_IndexError,
+    Dt_KeyError,
+} Dt_Error;
+
 
 /**
  * @brief set error handler
  * @param handler the handler function, pass a NULL to reset
  */
-HGL_DT_API extern void Dt_setErrorHandler(void (*handler)(const char *));
+HGL_DT_API extern void Dt_setErrorHandler(void (*handler)(Dt_Error, const char *));
 
 #ifdef __cplusplus
 }

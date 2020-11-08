@@ -1,7 +1,8 @@
-#include <dyntypes.h>
 #include "error.h"
 #include "mem.h"
+#include "value.h"
 
+#include <math.h>
 #include <stdio.h>
 
 typedef struct
@@ -15,11 +16,6 @@ typedef struct
 static Dt_ValuePtr to_bool(Dt_ValuePtr _this)
 {
     return Dt_newBool(AS_INT(_this)->value);
-}
-
-static Dt_ValuePtr to_int(Dt_ValuePtr _this)
-{
-    return _this;
 }
 
 static Dt_ValuePtr to_float(Dt_ValuePtr _this)
@@ -39,6 +35,86 @@ static Dt_ValuePtr length(Dt_ValuePtr _this)
     return Dt_newInt(0);
 }
 
+static Dt_ValuePtr op_add(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value + a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_sub(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value - a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_mul(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value * a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_div(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value / a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_pow(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(powl(AS_INT(_this)->value, a1b->value));
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_rem(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value % a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_shl(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value << a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_shr(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value >> a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_bitand(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value & a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
+static Dt_ValuePtr op_bitor(Dt_ValuePtr _this, Dt_ValuePtr a1)
+{
+    IntValue * a1b = AS_INT(DT_invokeMethod0(a1, Dt_M_ToInt));
+    Dt_ValuePtr r = Dt_newInt(AS_INT(_this)->value | a1b->value);
+    DT_decRef((Dt_ValuePtr)a1b);
+    return r;
+}
+
 Dt_Type Dt_IntType =
 {
     .name = "int",
@@ -46,10 +122,30 @@ Dt_Type Dt_IntType =
     {
         __Dt_private_methodfn0_na,
         to_bool,
-        to_int,
+        __Dt_private_self_incref_1a,
         to_float,
         to_str,
         length,
+        __Dt_private_self_incref_1a,
+        __Dt_private_self_incref_1a,
+        __Dt_private_self_incref_1a,
+        __Dt_private_self_incref_1a,
+        __Dt_private_self_decref_1a,
+        __Dt_private_delete_1a,
+    },
+    ._m1 =
+    {
+        __Dt_private_methodfn1_na,
+        op_add,
+        op_sub,
+        op_mul,
+        op_div,
+        op_pow,
+        op_rem,
+        op_shl,
+        op_shr,
+        op_bitand,
+        op_bitor,
     },
 };
 
@@ -87,7 +183,11 @@ _Static_assert(79 - 0 + 1 == INT_CONSTS_CNT, "incorrect number of constants");
 Dt_ValuePtr Dt_newInt(Dt_Int v)
 {
     if (v >= INT_CONSTS_BEG && v <= INT_CONSTS_END)
-        return (Dt_ValuePtr)(int_consts + v - INT_CONSTS_BEG);
+    {
+        Dt_ValuePtr p = (Dt_ValuePtr)(int_consts + v - INT_CONSTS_BEG);
+        DT_incRef(p);
+        return p;
+    }
 
     IntValue * p = (IntValue*)DT_ALLOCATE(sizeof(IntValue));
 
